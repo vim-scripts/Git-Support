@@ -4,12 +4,14 @@
 " 
 "   Description:  Provides access to Git's functionality from inside Vim.
 " 
+"                 See help file gitsupport.txt .
+"
 "   VIM Version:  7.0+
 "        Author:  Wolfgang Mehner, wolfgang-mehner@web.de
 "  Organization:  
 "       Version:  see variable g:GitSupport_Version below
 "       Created:  06.10.2012
-"      Revision:  22.03.2013
+"      Revision:  07.06.2013
 "       License:  Copyright (c) 2012-2013, Wolfgang Mehner
 "                 This program is free software; you can redistribute it and/or
 "                 modify it under the terms of the GNU General Public License as
@@ -28,10 +30,10 @@
 "
 " need at least 7.0
 if v:version < 700
-  echohl WarningMsg
+	echohl WarningMsg
 	echo 'The plugin git-support.vim needs Vim version >= 7.'
 	echohl None
-  finish
+	finish
 endif
 "
 " prevent duplicate loading
@@ -39,48 +41,72 @@ endif
 if &cp || ( exists('g:GitSupport_Version') && ! exists('g:GitSupport_DevelopmentOverwrite') )
 	finish
 endif
-let g:GitSupport_Version= '0.9'     " version number of this script; do not change
+let g:GitSupport_Version= '0.9.1'     " version number of this script; do not change
 "
 "-------------------------------------------------------------------------------
 " Auxiliary functions.   {{{1
 "-------------------------------------------------------------------------------
 "
 "-------------------------------------------------------------------------------
-" s:ErrorMsg : Print an error message.   {{{2
+" s:ApplyDefaultSetting : Write default setting to a global variable.   {{{2
+"
+" Parameters:
+"   varname - name of the variable (string)
+"   value   - default value (string)
+" Returns:
+"   -
+"
+" If g:<varname> does not exists, assign:
+"   g:<varname> = value
 "-------------------------------------------------------------------------------
 "
-function! s:ErrorMsg ( ... )
-	echohl WarningMsg
-	for line in a:000
-		echomsg line
-	endfor
-	echohl None
-endfunction    " ----------  end of function s:ErrorMsg  ----------
+function! s:ApplyDefaultSetting ( varname, value )
+	if ! exists ( 'g:'.a:varname )
+		exe 'let g:'.a:varname.' = '.string( a:value )
+	endif
+endfunction    " ----------  end of function s:ApplyDefaultSetting  ----------
 "
 "-------------------------------------------------------------------------------
 " s:ChangeCWD : Check the buffer and the CWD.   {{{2
 "
+" Parameters:
+"   [ bufnr, dir ] - data (list: integer and string, optional)
+" Returns:
+"   -
+"
+" Example:
 " First check the current working directory:
 "   let data = s:CheckCWD ()
 " then jump to the Git buffer:
 "   call s:OpenGitBuffer ( 'Git - <name>' )
 " then call this function to correctly set the directory of the buffer:
-"   call s:ChangeCWD ()
+"   call s:ChangeCWD ( data )
 "
-" The function s:ChangeCWD queries the working directory of the buffer your
+" Usage:
+" The function s:CheckCWD queries the working directory of the buffer your
 " starting out in, which is the buffer where you called the Git command. The
 " call to s:OpenGitBuffer then opens the requested buffer or jumps to it if it
 " already exists. Finally, s:ChangeCWD sets the working directory of the Git
 " buffer.
+" The buffer 'data' is a list, containing first the number of the current buffer
+" at the time s:CheckCWD was called, and second the name of the directory.
+"
+" When called without parameters, changes to the directory stored in
+" 'b:GitSupport_CWD'.
 "-------------------------------------------------------------------------------
 "
-function! s:ChangeCWD ( data )
+function! s:ChangeCWD ( ... )
 	"
 	" call originated from outside the Git buffer?
 	" also the case for a new buffer
-	if bufnr('%') != a:data[0]
-		"echomsg '2 - call from outside: '.a:data[0]
-		let b:GitSupport_CWD = a:data[1]
+	if a:0 == 0
+		if ! exists ( 'b:GitSupport_CWD' )
+			call s:ErrorMsg ( 'Not inside a Git buffer.' )
+			return
+		endif
+	elseif bufnr('%') != a:1[0]
+		"echomsg '2 - call from outside: '.a:1[0]
+		let b:GitSupport_CWD = a:1[1]
 	else
 		"echomsg '2 - call from inside: '.bufnr('%')
 		" noop
@@ -94,6 +120,11 @@ endfunction    " ----------  end of function s:ChangeCWD  ----------
 "-------------------------------------------------------------------------------
 " s:CheckCWD : Check the buffer and the CWD.   {{{2
 "
+" Parameters:
+"   -
+" Returns:
+"   [ bufnr, dir ] - data (list: integer and string)
+"
 " Usage: see s:ChangeCWD
 "-------------------------------------------------------------------------------
 "
@@ -103,8 +134,32 @@ function! s:CheckCWD ()
 endfunction    " ----------  end of function s:CheckCWD  ----------
 "
 "-------------------------------------------------------------------------------
+" s:ErrorMsg : Print an error message.   {{{2
+"
+" Parameters:
+"   line1 - a line (string)
+"   line2 - a line (string)
+"   ...   - ...
+" Returns:
+"   -
+"-------------------------------------------------------------------------------
+"
+function! s:ErrorMsg ( ... )
+	echohl WarningMsg
+	for line in a:000
+		echomsg line
+	endfor
+	echohl None
+endfunction    " ----------  end of function s:ErrorMsg  ----------
+"
+"-------------------------------------------------------------------------------
 " s:EscapeCurrent : Escape the name of the current file for the shell,   {{{2
 "     and prefix it with "--".
+"
+" Parameters:
+"   -
+" Returns:
+"   file_argument - the escaped filename (string)
 "-------------------------------------------------------------------------------
 "
 function! s:EscapeCurrent ()
@@ -113,14 +168,27 @@ endfunction    " ----------  end of function s:EscapeCurrent  ----------
 "
 "-------------------------------------------------------------------------------
 " s:EscapeFile : Escape a file for usage on the shell.   {{{2
+"
+" Parameters:
+"   filename - the name of the file (string)
+" Returns:
+"   file_argument - the escaped filename (string)
 "-------------------------------------------------------------------------------
 "
-function! s:EscapeFile ( file )
-	return shellescape ( a:file )
+function! s:EscapeFile ( filename )
+	return shellescape ( a:filename )
 endfunction    " ----------  end of function s:EscapeFile  ----------
 "
 "-------------------------------------------------------------------------------
 " s:GetGlobalSetting : Get a setting from a global variable.   {{{2
+"
+" Parameters:
+"   varname - name of the variable (string)
+" Returns:
+"   -
+"
+" If g:<varname> exists, assign:
+"   s:<varname> = g:<varname>
 "-------------------------------------------------------------------------------
 "
 function! s:GetGlobalSetting ( varname )
@@ -130,7 +198,15 @@ function! s:GetGlobalSetting ( varname )
 endfunction    " ----------  end of function s:GetGlobalSetting  ----------
 "
 "-------------------------------------------------------------------------------
-" s:GitCmdLineArgs : Get the base directory of a repository.   {{{2
+" s:GitCmdLineArgs : Split command-line parameters into a list.   {{{2
+"
+" Parameters:
+"   args - the arguments in one string (string)
+" Returns:
+"   [ <arg1>, <arg2>, ... ] - the split arguments (list of strings)
+"
+" In case of an error, a list with one empty string is returned:
+"   [ '' ]
 "-------------------------------------------------------------------------------
 "
 function! s:GitCmdLineArgs ( args )
@@ -141,13 +217,18 @@ function! s:GitCmdLineArgs ( args )
 		return split ( text, '\n' )
 	else
 		echo "Can not parse the command line arguments:\n\n".text
-		return ''
+		return [ '' ]
 	endif
 	"
 endfunction    " ----------  end of function s:GitCmdLineArgs  ----------
 "
 "-------------------------------------------------------------------------------
 " s:GitRepoBase : Get the base directory of a repository.   {{{2
+"
+" Parameters:
+"   -
+" Returns:
+"   path - the name of the base directory (string)
 "-------------------------------------------------------------------------------
 "
 function! s:GitRepoBase ()
@@ -165,18 +246,69 @@ endfunction    " ----------  end of function s:GitRepoBase  ----------
 "
 "-------------------------------------------------------------------------------
 " s:ImportantMsg : Print an important message.   {{{2
+"
+" Parameters:
+"   line1 - a line (string)
+"   line2 - a line (string)
+"   ...   - ...
+" Returns:
+"   -
 "-------------------------------------------------------------------------------
 "
 function! s:ImportantMsg ( ... )
 	echohl Search
-	for line in a:000
-		echomsg line
-	endfor
+	echo join ( a:000, "\n" )
 	echohl None
 endfunction    " ----------  end of function s:ImportantMsg  ----------
 "
 "-------------------------------------------------------------------------------
+" s:OpenFile : Open a file or jump to its window.   {{{2
+"
+" Parameters:
+"   filename - the name of the file (string)
+"   line     - line number (integer, optional)
+"   column   - column version number (integer, optional)
+" Returns:
+"   -
+"
+" If the file is already open, jump to its window. Otherwise open a window
+" showing the file. If the line number is given, jump to this line in the
+" buffer. If the column number is given, jump to the column.
+"-------------------------------------------------------------------------------
+"
+function! s:OpenFile ( filename, ... )
+	if bufwinnr ( '^'.a:filename.'$' ) == -1
+		" open buffer
+		belowright new
+		exe "edit ".fnameescape( a:filename )
+	else
+		" jump to window
+		exe bufwinnr( a:filename ).'wincmd w'
+	end
+	"
+	if a:0 >= 1
+		" jump to line
+		let pos = getpos( '.' )
+		let pos[1] = a:1   " line
+		if a:0 >= 2
+			let pos[2] = a:2   " col
+		endif
+		call setpos( '.', pos )
+	endif
+	"
+	if foldlevel('.') && g:Git_OpenFoldAfterJump == 'yes'
+		normal zv
+	endif
+endfunction    " ----------  end of function s:OpenFile  ----------
+"
+"-------------------------------------------------------------------------------
 " s:VersionLess : Compare two version numbers.   {{{2
+"
+" Parameters:
+"   v1 - 1st version number (string)
+"   v2 - 2nd version number (string)
+" Returns:
+"   less - true, if v1 < v2 (string)
 "-------------------------------------------------------------------------------
 "
 function! s:VersionLess ( v1, v2 )
@@ -207,60 +339,309 @@ function! s:VersionLess ( v1, v2 )
 	return -1
 endfunction    " ----------  end of function s:VersionLess  ----------
 " }}}2
+"-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" Custom menus.   {{{1
+"-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" s:GenerateCustomMenu : Generate custom menu entries.   {{{2
+"
+" Parameters:
+"   prefix - defines the menu the entries will be placed in (string)
+"   data   - custom menu entries (list of lists of strings)
+" Returns:
+"   -
+"
+" See :help g:Git_CustomMenu for a description of the format 'data' uses.
+"-------------------------------------------------------------------------------
+"
+function! s:GenerateCustomMenu ( prefix, data )
+	"
+	for [ entry_l, entry_r, cmd ] in a:data
+		" escape special characters and assemble entry
+		let entry_l = escape ( entry_l, ' |\' )
+		let entry_l = substitute ( entry_l, '\.\.', '\\.', 'g' )
+		let entry_r = escape ( entry_r, ' .|\' )
+		"
+		if entry_r == '' | let entry = a:prefix.'.'.entry_l
+		else             | let entry = a:prefix.'.'.entry_l.'<TAB>'.entry_r
+		endif
+		"
+		if cmd == ''
+			let cmd = ':'
+		endif
+		"
+		let silent = '<silent> '
+		"
+		" prepare command
+		if cmd =~ '<CURSOR>'
+			let mlist = matchlist ( cmd, '^\(.\+\)<CURSOR>\(.\{-}\)$' )
+			let cmd = mlist[1].mlist[2].repeat( '<LEFT>', len( mlist[2] ) )
+			let silent = ''
+		elseif cmd =~ '<EXECUTE>$'
+			let cmd = substitute ( cmd, '<EXECUTE>$', '<CR>', '' )
+		endif
+		"
+		let cmd = substitute ( cmd, '<WORD>',   '<cword>', 'g' )
+		let cmd = substitute ( cmd, '<FILE>',   '<cfile>', 'g' )
+		let cmd = substitute ( cmd, '<BUFFER>', '%',       'g' )
+		"
+		exe 'amenu '.silent.entry.' '.cmd
+	endfor
+	"
+endfunction    " ----------  end of function s:GenerateCustomMenu  ----------
+" }}}2
+"-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" Test: Custom cmdline completion.   {{{1
+"-------------------------------------------------------------------------------
+"
+" Debug:
+let g:GitSupport_LastCmdlineComplete = []
+"
+"-------------------------------------------------------------------------------
+" s:GitS_CmdlineComplete : Git-specific command line completion.   {{{2
+"-------------------------------------------------------------------------------
+"
+function! GitS_CmdlineComplete ( ArgLead, CmdLine, CursorPos )
+	"
+	let git_cmd = tolower ( matchstr ( a:CmdLine, '^Git\zs\w*' ) )
+	"
+	if git_cmd == ''
+		let git_cmd = matchstr ( a:CmdLine, '^Git\s\+\zs\w*' )
+	endif
+	"
+	" files
+	let filelist = split ( glob ( a:ArgLead.'*' ), "\n" )
+	"
+	for i in range( 0, len(filelist)-1 )
+		if isdirectory ( filelist[i] )
+			let filelist[i] .= '/'
+		endif
+	endfor
+	"
+	" git objects: branched, tags, remotes
+	let gitlist = []
+	"
+	" branches
+	let gitlist += split ( s:StandardRun ( 'branch', '-a', 't' ), '\_[* ]\+\%(remotes/\)\?' )
+	"
+	" tags
+	let gitlist += split ( s:StandardRun ( 'tag', '', 't' ), "\n" )
+	"
+	" remotes
+	let gitlist += split ( s:StandardRun ( 'remote', '', 't' ), "\n" )
+	"
+	call filter ( gitlist, '0 == match ( v:val, "\\V'.escape(a:ArgLead,'\').'" )' )
+	"
+	let g:GitSupport_LastCmdlineComplete = [ git_cmd, a:ArgLead, gitlist ]
+	"
+" 	return filelist
+	return escape ( join ( filelist + gitlist, "\n" ), ' \?*"' )
+	"
+endfunction    " ----------  end of function GitS_CmdlineComplete  ----------
+" }}}2
+"-------------------------------------------------------------------------------
 "
 "-------------------------------------------------------------------------------
 " Modul setup.   {{{1
 "-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" command lists, help topics   {{{2
+"
+let s:GitCommands = [
+			\ 'add',               'add--interactive',         'am',                'annotate',           'apply',
+			\ 'archive',           'bisect',                   'bisect--helper',    'blame',              'branch',
+			\ 'bundle',            'cat-file',                 'check-attr',        'checkout',           'checkout-index',
+			\ 'check-ref-format',  'cherry',                   'cherry-pick',       'citool',             'clean',
+			\ 'clone',             'commit',                   'commit-tree',       'config',             'count-objects',
+			\ 'credential-cache',  'credential-cache--daemon', 'credential-store',  'daemon',             'describe',
+			\ 'diff',              'diff-files',               'diff-index',        'difftool',           'difftool--helper',
+			\ 'diff-tree',         'fast-export',              'fast-import',       'fetch',              'fetch-pack',
+			\ 'filter-branch',     'fmt-merge-msg',            'for-each-ref',      'format-patch',       'fsck',
+			\ 'fsck-objects',      'gc',                       'get-tar-commit-id', 'grep',               'gui',
+			\ 'gui--askpass',      'hash-object',              'help',              'http-backend',       'http-fetch',
+			\ 'http-push',         'imap-send',                'index-pack',        'init',               'init-db',
+			\ 'instaweb',          'log',                      'lost-found',        'ls-files',           'ls-remote',
+			\ 'ls-tree',           'mailinfo',                 'mailsplit',         'merge',              'merge-base',
+			\ 'merge-file',        'merge-index',              'merge-octopus',     'merge-one-file',     'merge-ours',
+			\ 'merge-recursive',   'merge-resolve',            'merge-subtree',     'mergetool',          'merge-tree',
+			\ 'mktag',             'mktree',                   'mv',                'name-rev',           'notes',
+			\ 'pack-objects',      'pack-redundant',           'pack-refs',         'patch-id',           'peek-remote',
+			\ 'prune',             'prune-packed',             'pull',              'push',               'quiltimport',
+			\ 'read-tree',         'rebase',                   'receive-pack',      'reflog',             'relink',
+			\ 'remote',            'remote-ext',               'remote-fd',         'remote-ftp',         'remote-ftps',
+			\ 'remote-http',       'remote-https',             'remote-testgit',    'repack',             'replace',
+			\ 'repo-config',       'request-pull',             'rerere',            'reset',              'revert',
+			\ 'rev-list',          'rev-parse',                'rm',                'send-pack',          'shell',
+			\ 'sh-i18n--envsubst', 'shortlog',                 'show',              'show-branch',        'show-index',
+			\ 'show-ref',          'stage',                    'stash',             'status',             'stripspace',
+			\ 'submodule',         'symbolic-ref',             'tag',               'tar-tree',           'unpack-file',
+			\ 'unpack-objects',    'update-index',             'update-ref',        'update-server-info', 'upload-archive',
+			\ 'upload-pack',       'var',                      'verify-pack',       'verify-tag',         'web--browse',
+			\ 'whatchanged',       'write-tree',
+			\ ]
+"
+let s:HelpTopics = s:GitCommands + [
+			\ 'attributes', 'cli',               'core-tutorial', 'cvs-migration', 'diffcore',
+			\ 'gitk',       'glossary',          'hooks',         'ignore',        'modules',
+			\ 'namespaces', 'repository-layout', 'tutorial',      'tutorial-2',    'workflows'
+			\ ]
+"
+function! GitS_HelpTopicsComplete ( ArgLead, CmdLine, CursorPos )
+	return filter( copy( s:HelpTopics ), 'v:val =~ "\\V\\<'.escape(a:ArgLead,'\').'\\w\\*"' )
+endfunction    " ----------  end of function GitS_HelpTopicsComplete  ----------
 "
 " platform specifics   {{{2
 "
 let s:MSWIN = has("win16") || has("win32")   || has("win64")     || has("win95")
 let s:UNIX	= has("unix")  || has("macunix") || has("win32unix")
 "
-" let s:CmdLineEscChar = ' |"\'
-" if s:MSWIN
-" 	let s:FilenameEscChar = ''
-" else
-" 	let s:FilenameEscChar = ' \%#[]'
-" endif
+if s:MSWIN
+	"
+	"-------------------------------------------------------------------------------
+	" MS Windows
+	"-------------------------------------------------------------------------------
+	"
+	if match(      substitute( expand('<sfile>'), '\\', '/', 'g' ),
+				\   '\V'.substitute( expand('$HOME'),   '\\', '/', 'g' ) ) == 0
+		" user installation assumed
+		let s:installation = 'local'
+	else
+		" system wide installation
+		let s:installation = 'system'
+	endif
+	"
+	let s:plugin_dir = substitute( expand('<sfile>:p:h:h'), '\\', '/', 'g' )
+	"
+else
+	"
+	"-------------------------------------------------------------------------------
+	" Linux/Unix
+	"-------------------------------------------------------------------------------
+	"
+	if match( expand('<sfile>'), '\V'.resolve(expand('$HOME')) ) == 0
+		" user installation assumed
+		let s:installation = 'local'
+	else
+		" system wide installation
+		let s:installation = 'system'
+	endif
+	"
+	let s:plugin_dir = expand('<sfile>:p:h:h')
+	"
+endif
 "
 " settings   {{{2
-"
-let s:Git_Executable = 'git'      " Git's executable
-let s:Git_LoadMenus  = 'yes'      " load the menus?
-let s:Git_RootMenu   = '&Git'     " name of the root menu
+
+if s:MSWIN
+	let s:Git_Executable     = 'C:\Program Files\Git\bin\git.exe'     " Git executable
+	let s:Git_GitKExecutable = 'C:\Program Files\Git\bin\tclsh.exe'   " GitK executable
+	let s:Git_GitKScript     = 'C:\Program Files\Git\bin\gitk'        " GitK script
+else
+	let s:Git_Executable     = 'git'    " Git executable
+	let s:Git_GitKExecutable = 'gitk'   " GitK executable
+	let s:Git_GitKScript     = ''       " GitK script
+endif
+let s:Git_LoadMenus      = 'yes'    " load the menus?
+let s:Git_RootMenu       = '&Git'   " name of the root menu
 "
 if ! exists ( 's:MenuVisible' )
 	let s:MenuVisible = 0           " menus are not visible at the moment
 endif
 "
+let s:Git_CustomMenu = [
+			\ [ '&grep, word under cursor',  ':GitGrepTop', ':GitGrepTop <WORD><EXECUTE>' ],
+			\ [ '&grep, version x..y',       ':GitGrepTop', ':GitGrepTop -i "Version[^[:digit:]]\+<CURSOR>"' ],
+			\ [ '-SEP1-',                    '',            '' ],
+			\ [ '&log, grep commit msg..',   ':GitLog',     ':GitLog -i --grep="<CURSOR>"' ],
+			\ [ '&log, grep diff word',      ':GitLog',     ':GitLog -p -S "<CURSOR>"' ],
+			\ [ '&log, grep diff line',      ':GitLog',     ':GitLog -p -G "<CURSOR>"' ],
+			\ [ '-SEP2-',                    '',            '' ],
+			\ [ '&merge, fast-forward only', ':GitMerge',   ':GitMerge --ff-only <CURSOR>' ],
+			\ [ '&merge, no commit',         ':GitMerge',   ':GitMerge --no-commit <CURSOR>' ],
+			\ [ '&merge, abort',             ':GitMerge',   ':GitMerge --abort<EXECUTE>' ],
+			\ ]
+"
 call s:GetGlobalSetting ( 'Git_Executable' )
+call s:GetGlobalSetting ( 'Git_GitKExecutable' )
+call s:GetGlobalSetting ( 'Git_GitKScript' )
 call s:GetGlobalSetting ( 'Git_LoadMenus' )
 call s:GetGlobalSetting ( 'Git_RootMenu' )
+call s:GetGlobalSetting ( 'Git_CustomMenu' )
 "
-let s:Enabled = 1
-let s:DisabledReason = ""
+call s:ApplyDefaultSetting ( 'Git_DiffExpandEmpty',      'no' )
+call s:ApplyDefaultSetting ( 'Git_OpenFoldAfterJump',    'yes' )
+call s:ApplyDefaultSetting ( 'Git_StatusStagedOpenDiff', 'cached' )
+"
+let s:Enabled         = 1           " Git enabled?
 let s:DisabledMessage = "Git-Support not working:"
-let s:GitVersion = ""
-let s:GitHelpFormat = ""
+let s:DisabledReason  = ""
 "
-" check Git executable   {{{2
+let s:EnabledGitK        = 1        " GitK enabled?
+let s:DisableGitKMessage = "GitK not avaiable:"
+let s:DisableGitKReason  = ""
 "
-if s:Git_Executable =~ '^LANG=\w\+\s.'
-	if ! executable ( matchstr ( s:Git_Executable, '^LANG=\w\+\s\+\zs.\+$' ) )
-		let s:Enabled = 0
-		let s:DisabledReason = "Git not executable: ".s:Git_Executable
+let s:FoundGitKScript   = 1
+let s:GitKScriptMessage = ""
+"
+let s:GitVersion    = ""            " Git Version
+let s:GitHelpFormat = ""            " 'man' or 'html'
+"
+" check git executable   {{{2
+"
+function! s:CheckExecutable ( name, exe )
+	"
+	let executable = a:exe
+	let enabled = 1
+	let reason  = ""
+	"
+	if executable =~ '^LANG=\w\+\s.'
+		let [ lang, executable ] = matchlist ( executable, '^\(LANG=\w\+\)\s\+\(.\+\)$' )[1:2]
+		if ! executable ( executable )
+			let enabled = 0
+			let reason = a:name." not executable: ".executable
+		endif
+		let executable = lang.' '.shellescape( executable )
+	elseif executable =~ '^\(["'']\)\zs.\+\ze\1'
+		if ! executable ( matchstr ( executable, '^\(["'']\)\zs.\+\ze\1' ) )
+			let enabled = 0
+			let reason = a:name." not executable: ".executable
+		endif
+	else
+		if ! executable ( executable )
+			let enabled = 0
+			let reason = a:name." not executable: ".executable
+		endif
+		let executable = shellescape( executable )
 	endif
-elseif s:Git_Executable =~ '^\(["'']\)\zs.\+\ze\1'
-	if ! executable ( matchstr ( s:Git_Executable, '^\(["'']\)\zs.\+\ze\1' ) )
-		let s:Enabled = 0
-		let s:DisabledReason = "Git not executable: ".s:Git_Executable
+	"
+	return [ executable, enabled, reason ]
+endfunction    " ----------  end of function s:CheckExecutable  ----------
+"
+function! s:CheckFile ( shortname, filename, esc )
+	"
+	let filename = a:filename
+	let found    = 1
+	let message  = ""
+	"
+	if ! filereadable ( filename )
+		let found = 0
+		let message = a:shortname." not found: ".filename
 	endif
-else
-	if ! executable ( s:Git_Executable )
-		let s:Enabled = 0
-		let s:DisabledReason = "Git not executable: ".s:Git_Executable
-	endif
+	let filename = shellescape( filename )
+	"
+	return [ filename, found, message ]
+endfunction    " ----------  end of function s:CheckFile  ----------
+"
+let [ s:Git_Executable,     s:Enabled,     s:DisabledReason    ] = s:CheckExecutable( 'git',  s:Git_Executable )
+let [ s:Git_GitKExecutable, s:EnabledGitK, s:DisableGitKReason ] = s:CheckExecutable( 'gitk', s:Git_GitKExecutable )
+if ! empty ( s:Git_GitKScript )
+	let [ s:Git_GitKScript, s:FoundGitKScript, s:GitKScriptMessage ] = s:CheckFile( 'gitk script', s:Git_GitKScript, 1 )
 endif
 "
 " check Git version   {{{2
@@ -311,37 +692,47 @@ let s:HelpTxtStdNoUpdate .= "q       : close"
 " custom commands   {{{2
 "
 if s:Enabled
-	command  -bang -nargs=* -complete=file Git                    :call GitS_Run('<args>','<bang>'=='!'?'b':'')
-	command!       -nargs=* -complete=file GitRun                 :call GitS_Run('<args>','')
-	command!       -nargs=* -complete=file GitBuf                 :call GitS_Run('<args>','b')
-	command! -bang -nargs=* -complete=file GitAdd                 :call GitS_Add('<args>','<bang>'=='!'?'ef':'e')
-	command!       -nargs=* -complete=file GitBlame               :call GitS_Blame('update','<args>')
-	command!       -nargs=* -complete=file GitBranch              :call GitS_Branch('<args>','')
-	command!       -nargs=* -complete=file GitCheckout            :call GitS_Checkout('<args>','ce')
-	command!       -nargs=* -complete=file GitCommit              :call GitS_Commit('direct','<args>','')
-	command!       -nargs=? -complete=file GitCommitFile          :call GitS_Commit('file','<args>','')
-	command!       -nargs=0                GitCommitMerge         :call GitS_Commit('merge','','')
-	command!       -nargs=+                GitCommitMsg           :call GitS_Commit('msg','<args>','')
-	command!       -nargs=* -complete=file GitDiff                :call GitS_Diff('update','<args>')
-	command!       -nargs=*                GitFetch               :call GitS_Fetch('<args>','')
-	command!       -nargs=*                GitHelp                :call GitS_Help('update','<args>')
-	command!       -nargs=* -complete=file GitLog                 :call GitS_Log('update','<args>')
-	command!       -nargs=*                GitMerge               :call GitS_Merge('<args>','')
-	command!       -nargs=* -complete=file GitMove                :call GitS_Move('<args>','')
-	command!       -nargs=* -complete=file GitMv                  :call GitS_Move('<args>','')
-	command!       -nargs=*                GitPull                :call GitS_Pull('<args>','')
-	command!       -nargs=*                GitPush                :call GitS_Push('<args>','')
-	command!       -nargs=* -complete=file GitRemote              :call GitS_Remote('<args>','')
-	command!       -nargs=* -complete=file GitRemove              :call GitS_Remove('<args>','e')
-	command!       -nargs=* -complete=file GitRm                  :call GitS_Remove('<args>','e')
-	command!       -nargs=* -complete=file GitReset               :call GitS_Reset('<args>','e')
-	command!       -nargs=* -complete=file GitShow                :call GitS_Show('update','<args>')
-	command!       -nargs=*                GitStash               :call GitS_Stash('<args>','')
-	command!       -nargs=0                GitStatus              :call GitS_Status('update')
-	command!       -nargs=*                GitTag                 :call GitS_Tag('<args>','')
+	command! -nargs=* -complete=file -bang                           GitAdd             :call GitS_Add(<q-args>,'<bang>'=='!'?'ef':'e')
+	command! -nargs=* -complete=file -range=0                        GitBlame           :call GitS_Blame('update',<q-args>,<line1>,<line2>)
+	command! -nargs=* -complete=file                                 GitBranch          :call GitS_Branch(<q-args>,'')
+	command! -nargs=* -complete=file                                 GitCheckout        :call GitS_Checkout(<q-args>,'ce')
+	command! -nargs=* -complete=file                                 GitCommit          :call GitS_Commit('direct',<q-args>,'')
+	command! -nargs=? -complete=file                                 GitCommitFile      :call GitS_Commit('file',<q-args>,'')
+	command! -nargs=0                                                GitCommitMerge     :call GitS_Commit('merge','','')
+	command! -nargs=+                                                GitCommitMsg       :call GitS_Commit('msg',<q-args>,'')
+	command! -nargs=* -complete=file                                 GitDiff            :call GitS_Diff('update',<q-args>)
+	command! -nargs=*                                                GitFetch           :call GitS_Fetch(<q-args>,'')
+	command! -nargs=+ -complete=file                                 GitGrep            :call GitS_Grep('update',<q-args>)
+	command! -nargs=+ -complete=file                                 GitGrepTop         :call GitS_Grep('top',<q-args>)
+	command! -nargs=* -complete=customlist,GitS_HelpTopicsComplete   GitHelp            :call GitS_Help('update',<q-args>)
+	command! -nargs=* -complete=file                                 GitLog             :call GitS_Log('update',<q-args>)
+	command! -nargs=*                                                GitMerge           :call GitS_Merge('direct',<q-args>,'')
+	command! -nargs=*                                                GitMergeUpstream   :call GitS_Merge('upstream',<q-args>,'')
+	command! -nargs=* -complete=file                                 GitMove            :call GitS_Move(<q-args>,'')
+	command! -nargs=* -complete=file                                 GitMv              :call GitS_Move(<q-args>,'')
+	command! -nargs=*                                                GitPull            :call GitS_Pull(<q-args>,'')
+	command! -nargs=*                                                GitPush            :call GitS_Push(<q-args>,'')
+	command! -nargs=* -complete=file                                 GitRemote          :call GitS_Remote(<q-args>,'')
+	command! -nargs=* -complete=file                                 GitRemove          :call GitS_Remove(<q-args>,'e')
+	command! -nargs=* -complete=file                                 GitRm              :call GitS_Remove(<q-args>,'e')
+	command! -nargs=* -complete=file                                 GitReset           :call GitS_Reset(<q-args>,'e')
+	command! -nargs=* -complete=file                                 GitShow            :call GitS_Show('update',<q-args>)
+	command! -nargs=*                                                GitStash           :call GitS_Stash(<q-args>,'')
+	command! -nargs=0                                                GitStatus          :call GitS_Status('update')
+	command! -nargs=*                                                GitTag             :call GitS_Tag(<q-args>,'')
+	command  -nargs=* -complete=file -bang                           Git                :call GitS_Run(<q-args>,'<bang>'=='!'?'b':'')
+	command! -nargs=* -complete=file                                 GitRun             :call GitS_Run(<q-args>,'')
+	command! -nargs=* -complete=file                                 GitBuf             :call GitS_Run(<q-args>,'b')
+	command! -nargs=* -complete=file                                 GitK               :call GitS_GitK(<q-args>)
+	command! -nargs=0                                                GitSupportHelp     :call GitS_PluginHelp("gitsupport")
+	command! -nargs=0                                                GitSupportSettings :call GitS_PluginSettings()
 else
-	command! -bang -nargs=*                Git                    :call GitS_Help('disabled')
-	command!       -nargs=*                GitHelp                :call GitS_Help('disabled')
+	command  -nargs=*                -bang                           Git                :call GitS_Help('disabled')
+	command! -nargs=*                                                GitRun             :call GitS_Help('disabled')
+	command! -nargs=*                                                GitBuf             :call GitS_Help('disabled')
+	command! -nargs=*                                                GitHelp            :call GitS_Help('disabled')
+	command! -nargs=0                                                GitSupportHelp     :call GitS_PluginHelp("gitsupport")
+	command! -nargs=0                                                GitSupportSettings :call GitS_PluginSettings()
 endif
 "
 " syntax highlighting   {{{2
@@ -352,32 +743,48 @@ highlight default link GitHighlight1  Identifier
 highlight default link GitHighlight2  PreProc
 highlight default      GitHighlight3  term=underline  cterm=underline  gui=underline
 highlight default link GitWarning     WarningMsg
+highlight default link GitSevere      ErrorMsg
 "
 highlight default link GitAdd         DiffAdd
 highlight default link GitRemove      DiffDelete
 highlight default link GitConflict    DiffText
 "
 " }}}2
+"-------------------------------------------------------------------------------
 "
 "-------------------------------------------------------------------------------
 " s:Question : Ask the user a question.   {{{1
+"
+" Parameters:
+"   prompt    - prompt, shown to the user (string)
+"   highlight - "normal" or "warning" (string, default "normal")
+" Returns:
+"   retval - the user input (integer)
+"
+" The possible values of 'retval' are:
+"    1 - answer was yes ("y")
+"    0 - answer was no ("n")
+"   -1 - user aborted ("ESC" or "CTRL-C")
 "-------------------------------------------------------------------------------
 "
 function! s:Question ( text, ... )
 	"
 	let ret = -2
 	"
+	" highlight prompt
 	if a:0 == 0 || a:1 == 'normal'
-		echohl Search                               " highlight prompt
+		echohl Search
 	elseif a:1 == 'warning'
-		echohl Error                                " highlight prompt
+		echohl Error
 	else
 		echoerr 'Unknown option : "'.a:1.'"'
 		return
 	end
 	"
+	" question
 	echo a:text.' [y/n]: '
 	"
+	" answer: "y", "n", "ESC" or "CTRL-C"
 	while ret == -2
 		let c = nr2char( getchar() )
 		"
@@ -389,19 +796,36 @@ function! s:Question ( text, ... )
 			let ret = -1
 		endif
 	endwhile
-	echohl None                                   " reset highlighting
+	"
+	" reset highlighting
+	echohl None
 	"
 	return ret
 endfunction    " ----------  end of function s:Question  ----------
 "
 "-------------------------------------------------------------------------------
 " s:OpenGitBuffer : Put output in a read-only buffer.   {{{1
+"
+" Parameters:
+"   buf_name - name of the buffer (string)
+" Returns:
+"   opened -  true, if a new buffer was opened (integer)
+"
+" If a buffer called 'buf_name' already exists, jump to that buffer. Otherwise,
+" open a buffer of the given name an set it up as a "temporary" buffer. It is
+" deleted after the window is closed.
+"
+" Settings:
+" - noswapfile
+" - bufhidden=wipe
+" - tabstop=8
+" - foldmethod=syntax
 "-------------------------------------------------------------------------------
 "
 function! s:OpenGitBuffer ( buf_name )
 	"
-	" a buffer like this already exists?
-	if bufnr ( a:buf_name ) != -1
+	" a buffer like this already opened on the current tab page?
+	if bufwinnr ( a:buf_name ) != -1
 		" yes -> go to the window containing the buffer
 		exe bufwinnr( a:buf_name ).'wincmd w'
 		return 0
@@ -409,40 +833,68 @@ function! s:OpenGitBuffer ( buf_name )
 	"
 	" no -> open a new window
 	aboveleft new
-	silent exe 'file '.escape( a:buf_name, ' ' )
 	"
-	" settings of the new buffer
-	setlocal noswapfile
-	setlocal bufhidden=wipe
-	setlocal tabstop=8
-	setlocal foldmethod=syntax
+	" buffer exists elsewhere?
+	if bufnr ( a:buf_name ) != -1
+		" yes -> settings of the new buffer
+		silent exe 'edit #'.bufnr( a:buf_name )
+	else
+		" no -> settings of the new buffer
+		silent exe 'file '.escape( a:buf_name, ' ' )
+		setlocal noswapfile
+		setlocal bufhidden=wipe
+		setlocal tabstop=8
+		setlocal foldmethod=syntax
+	end
 	"
 	return 1
 endfunction    " ----------  end of function s:OpenGitBuffer  ----------
 "
 "-------------------------------------------------------------------------------
-
 " s:UpdateGitBuffer : Put output in a read-only buffer.   {{{1
+"
+" Parameters:
+"   command - the command to run (string)
+"   stay    - if true, return to the old position in the buffer
+"             (integer, default: 0)
+" Returns:
+"   success - true, if the command was run successfully (integer)
+"
+" The output of the command is used to replace the text in the current buffer.
+" If 'stay' is true, return to the same line the cursor was placed in before
+" the update. After updating, 'modified' is cleared.
 "-------------------------------------------------------------------------------
 "
-function! s:UpdateGitBuffer ( command )
+function! s:UpdateGitBuffer ( command, ... )
 	"
-	" save the position
-	let pos = line('.')
+	if a:0 == 1 && a:1
+		" return to old position
+		let pos = line('.')
+	else
+		let pos = 1
+	endif
 	"
 	" delete the previous contents
 	setlocal modifiable
 	setlocal noro
 	silent exe '1,$delete'
 	"
+	" pause syntax highlighting (for speed)
+	if &syntax != ''
+		setlocal syntax=OFF
+	endif
+	"
 	" insert the output of the command
-	let text = system ( a:command )
+	silent exe 'r! '.a:command
 	"
-	silent exe 'put! = text'
+	" restart syntax highlighting
+	if &syntax != ''
+		setlocal syntax=ON
+	endif
 	"
-	" delete the last line (empty) and return to position
- 	normal zR
-	normal Gdd
+	" delete the first line (empty) and go to position
+	normal zR
+	normal ggdd
 	silent exe ':'.pos
 	"
 	" read-only again
@@ -456,15 +908,28 @@ endfunction    " ----------  end of function s:UpdateGitBuffer  ----------
 "-------------------------------------------------------------------------------
 " s:StandardRun : execute 'git <cmd> ...'   {{{1
 "
+" Parameters:
+"   cmd     - the Git command to run (string), this is not the Git executable!
+"   param   - the parameters (string)
+"   flags   - all set flags (string)
+"   allowed - all allowed flags (string, default: 'cet')
+" Returns:
+"   text    - the text produced by the command (string),
+"             only if the flag 't' is set
+"
+" Flags are characters. The parameter 'flags' is a concatenation of all set
+" flags, the parameter 'allowed' is a concatenation of all allowed flags.
+"
 " Flags:
-" - c : Ask for confirmation.
-" - e : Expand empty 'param' to current buffer.
+"   c - ask for confirmation
+"   e - expand empty 'param' to current buffer
+"   t - return the text instead of echoing it
 "-------------------------------------------------------------------------------
 "
 function! s:StandardRun( cmd, param, flags, ... )
 	"
 	if a:0 == 0
-		let flag_check = '[^ce]'
+		let flag_check = '[^cet]'
 	else
 		let flag_check = '[^'.a:1.']'
 	end
@@ -479,28 +944,30 @@ function! s:StandardRun( cmd, param, flags, ... )
 	"
 	let cmd = s:Git_Executable.' '.a:cmd.' '.param
 	"
-	if a:flags =~ 'c' && s:Question ( 'Execute "'.cmd.'"?' ) != 1
+	if a:flags =~ 'c' && s:Question ( 'Execute "git '.a:cmd.' '.param.'"?' ) != 1
 		echo "aborted"
 		return
 	endif
 	"
 	let text = system ( cmd )
 	"
-	if v:shell_error == 0 && text =~ '^\_s*$'
-		echo "ran successfully"               | " success
-	elseif v:shell_error == 0
-		echo "ran successfully:\n".text       | " success
+	if v:shell_error != 0
+		echo "\"".cmd."\" failed:\n\n".text           | " failure
+	elseif a:flags =~ 't'
+		return substitute ( text, '\_s*$', '', '' )     " success
+	elseif text =~ '^\_s*$'
+		echo "ran successfully"                       | " success
 	else
-		echo "\"".cmd."\" failed:\n\n".text   | " failure
+		echo "ran successfully:\n".text               | " success
 	endif
 	"
 endfunction    " ----------  end of function s:StandardRun  ----------
 "
 "-------------------------------------------------------------------------------
-" GitS_Fold : fold text for 'git log'   {{{1
+" GitS_FoldLog : fold text for 'git diff/log/show/status'   {{{1
 "-------------------------------------------------------------------------------
 "
-function! GitS_Fold ()
+function! GitS_FoldLog ()
 	let line = getline( v:foldstart )
 	let head = '+-'.v:folddashes.' '
 	let tail = ' ('.( v:foldend - v:foldstart + 1 ).' lines) '
@@ -541,7 +1008,25 @@ function! GitS_Fold ()
 	else
 		return head.line.tail
 	endif
-endfunction    " ----------  end of function GitS_Fold  ----------
+endfunction    " ----------  end of function GitS_FoldLog  ----------
+"
+"-------------------------------------------------------------------------------
+" GitS_FoldGrep : fold text for 'git grep'   {{{1
+"-------------------------------------------------------------------------------
+"
+function! GitS_FoldGrep ()
+	let line = getline( v:foldstart )
+	let head = '+-'.v:folddashes.' '
+	let tail = ' ('.( v:foldend - v:foldstart + 1 ).' lines) '
+	"
+	" take the filename from the first line
+	let file = matchstr ( line, '^[^:]\+\ze:' )
+	if file != ''
+		return file.tail
+	else
+		return head.line.tail
+	end
+endfunction    " ----------  end of function GitS_FoldGrep  ----------
 "
 "-------------------------------------------------------------------------------
 " GitS_Run : execute 'git ...'   {{{1
@@ -614,9 +1099,9 @@ endfunction    " ----------  end of function GitS_RunBuf  ----------
 " GitS_Add : execute 'git add ...'   {{{1
 "
 " Flags:
-" - c : Ask for confirmation.
-" - e : Expand empty 'param' to current buffer.
-" - f : Force add (cmdline param -f).
+"   c - Ask for confirmation.
+"   e - Expand empty 'param' to current buffer.
+"   f - Force add (cmdline param -f).
 "-------------------------------------------------------------------------------
 "
 function! GitS_Add( param, flags )
@@ -629,13 +1114,11 @@ function! GitS_Add( param, flags )
 	else                                  | let param = a:param
 	endif
 	"
-	let cmd = s:Git_Executable.' add '
+	if a:flags =~ 'f' | let param = '-f '.param | endif
 	"
-	if a:flags =~ 'f' | let cmd .= '-f ' | endif
+	let cmd = s:Git_Executable.' add '.param
 	"
-	let cmd .= param
-	"
-	if a:flags =~ 'c' && s:Question ( 'Execute "'.cmd.'"?' ) != 1
+	if a:flags =~ 'c' && s:Question ( 'Execute "git add '.param.'"?' ) != 1
 		echo "aborted"
 		return
 	endif
@@ -659,23 +1142,137 @@ endfunction    " ----------  end of function GitS_Add  ----------
 " GitS_Blame : execute 'git blame ...'   {{{1
 "-------------------------------------------------------------------------------
 "
+"-------------------------------------------------------------------------------
+" s:Blame_GetFile : Get the file, line and the commit under the cursor.   {{{2
+"
+" Parameters:
+"   -
+" Returns:
+"   [ <file-name>, <line>, <commit> ] - data (list: string, integer, string)
+"
+" The entries are as follows:
+"   file name - name of the file under the cursor (string)
+"   line      - the line in the original file (integer)
+"   commit    - the commit (string)
+"
+" If only the name of the file could be obtained, returns:
+"   [ <file-name>, -1, ... ]
+" If the name of the file could be found:
+"   [ '', -1, ... ]
+" If the line is not committed yet:
+"   [ ..., ..., '-NEW-' ]
+" If the commit could not be obtained:
+"   [ ..., ..., '' ]
+"-------------------------------------------------------------------------------
+"
+function! s:Blame_GetFile()
+	"
+	let f_name = ''
+	let f_line = '-1'
+	let commit = ''
+	"
+	if exists ( 'b:GitSupport_BlameFile ' )
+		let f_name = b:GitSupport_BlameFile
+	else
+		let args = s:GitCmdLineArgs( b:GitSupport_Param )
+		"
+		if empty ( args )
+			let f_name = ''
+		else
+			let f_name = args[-1]
+		end
+		"
+		let b:GitSupport_BlameFile = f_name
+	end
+	"
+	" LINE:
+	"   [^] commit [ofile] (INFO line)
+	" The token 'ofile' appears if the file has been renamed in the meantime.
+	" INFO: (not used)
+	"   author date time timezone
+	let line = getline('.')
+	let mlist = matchlist ( line, '^\^\?\(\x\+\)\s\+\%([^(]\{-}\s\+\)\?(\([^)]\+\)\s\(\d\+\))' )
+	"
+	if empty ( mlist )
+		return [ f_name, -1, '' ]
+	endif
+	"
+	let [ commit, info, f_line ] = mlist[1:3]
+	"
+	if info =~ '^Not Committed Yet '
+		let commit = '-NEW-'
+	endif
+	"
+	return [ f_name, str2nr ( f_line ), commit ]
+	"
+endfunction    " ----------  end of function s:Blame_GetFile  ----------
+" }}}2
+"-------------------------------------------------------------------------------
+"
 function! GitS_Blame( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
-		echo s:HelpTxtStd
+		let txt  = s:HelpTxtStd."\n\n"
+		let txt .= "of      : file under cursor: open file (edit)\n"
+		let txt .= "oj      : file under cursor: open and jump to the corresponding line\n"
+		let txt .= "\n"
+		let txt .= "cs      : commit under cursor: show\n"
+		echo txt
 		return
 	elseif a:action == 'quit'
 		close
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
-		elseif empty( a:1 ) | let param = s:EscapeCurrent()
-		else                | let param = a:1
+		let update_only = a:0 == 0
+		"
+		if update_only
+			" run again with old parameters
+		else
+			if   empty( a:1 ) | let param = s:EscapeCurrent()
+			else              | let param = a:1
+			endif
+			"
+			if a:0 >= 3 && a:2 <= a:3 && ! ( a:2 == 1 && a:3 == 1 )
+				let param = '-L '.a:2.','.a:3.' '.param
+			endif
+			"
 		endif
 		"
+	elseif a:action =~ '\<\%(\|edit\|jump\)\>'
+		"
+		call s:ChangeCWD ()
+		"
+		let [ f_name, f_line, commit ] = s:Blame_GetFile ()
+		"
+		if f_name == ''
+			return s:ErrorMsg ( 'No file under the cursor.' )
+		end
+		"
+		if a:action == 'edit'
+					\ || ( a:action == 'jump' && f_line == -1 )
+			call s:OpenFile( f_name )
+		elseif a:action == 'jump'
+			call s:OpenFile( f_name, f_line, 1 )
+		endif
+		"
+		return
+	elseif a:action == 'show'
+		"
+		let [ f_name, f_line, commit ] = s:Blame_GetFile ()
+		"
+		if commit == '-NEW-'
+			return s:ImportantMsg ( 'Line not committed yet.' )
+		elseif commit == ''
+			return s:ErrorMsg ( 'Not commit under the cursor.' )
+		end
+		"
+		call GitS_Show( 'update', commit )
+		"
+		return
 	else
 		echoerr 'Unknown action "'.a:action.'".'
 		return
@@ -692,11 +1289,16 @@ function! GitS_Blame( action, ... )
 		exe 'nmap          <buffer> <S-F1> :call GitS_Blame("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_Blame("quit")<CR>'
 		exe 'nmap <silent> <buffer> u      :call GitS_Blame("update")<CR>'
+		"
+		exe 'nmap <silent> <buffer> of      :call GitS_Blame("edit")<CR>'
+		exe 'nmap <silent> <buffer> oj      :call GitS_Blame("jump")<CR>'
+		"
+		exe 'nmap <silent> <buffer> cs      :call GitS_Blame("show")<CR>'
 	endif
 	"
 	call s:ChangeCWD ( buf )
 	"
-	if a:0 == 0
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -704,7 +1306,7 @@ function! GitS_Blame( action, ... )
 	"
 	let cmd = s:Git_Executable.' blame '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_Blame  ----------
 "
@@ -756,7 +1358,7 @@ function! GitS_BranchList( action )
 	"
 	let cmd = s:Git_Executable.' branch -avv'
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, 1 )
 	"
 endfunction    " ----------  end of function GitS_BranchList  ----------
 "
@@ -795,7 +1397,7 @@ endfunction    " ----------  end of function GitS_Checkout  ----------
 " GitS_Commit : execute 'git commit ...'   {{{1
 "
 " Flags:
-" - c : Ask for confirmation.
+"   c - Ask for confirmation.
 "-------------------------------------------------------------------------------
 "
 function! GitS_Commit( mode, param, flags )
@@ -842,15 +1444,15 @@ function! GitS_Commit( mode, param, flags )
 		else
 			"
 			" commit ...
-			let cmd = s:Git_Executable.' commit '.a:param
+			let param = a:param
 			"
 		endif
 		"
 	elseif a:mode == 'file'
 		"
 		" message from file
-		if empty( a:param ) | let cmd = s:Git_Executable.' commit -F '.s:EscapeFile( expand('%') )
-		else                | let cmd = s:Git_Executable.' commit -F '.a:param
+		if empty( a:param ) | let param = '-F '.s:EscapeFile( expand('%') )
+		else                | let param = '-F '.a:param
 		endif
 		"
 	elseif a:mode == 'merge'
@@ -858,34 +1460,37 @@ function! GitS_Commit( mode, param, flags )
 		" message from ./.git/MERGE_MSG file
 		let file = s:GitRepoBase ()
 		"
-		" could not get base?
+		" could not get top-level?
 		if file == '' | return | endif
 		"
 		let file .= '/.git/MERGE_MSG'
 		"
 		" not readable?
 		if ! filereadable ( file )
-			echo 'could not read the file ".git/MERGE_MSG" /'
-						\ .' there does not seem to be a merge conflict (see :help GitCommitMerge)'
-			return
+			return s:ErrorMsg (
+						\ 'could not read the file ".git/MERGE_MSG" /',
+						\ 'there does not seem to be a merge conflict (see :help GitCommitMerge)' )
 		endif
 		"
 		" commit
-		let cmd = s:Git_Executable.' commit -F '.s:EscapeFile( file )
+		let param = '-F '.s:EscapeFile( file )
 		"
 	elseif a:mode == 'msg'
 		" message from command line
-		let cmd = s:Git_Executable.' commit -m "'.a:param.'"'
+		let param = '-m "'.a:param.'"'
 	else
 		echoerr 'Unknown mode "'.a:mode.'".'
 		return
 	endif
 	"
-	if a:flags =~ 'c' && s:Question ( 'Execute "'.cmd.'"?' ) != 1
+	let cmd = s:Git_Executable.' commit '.param
+	"
+	if a:flags =~ 'c' && s:Question ( 'Execute "git commit '.param.'"?' ) != 1
 		echo "aborted"
 		return
 	endif
 	"
+	" :TODO:27.11.2013 15:18:WM: use s:StandardRun
 	let text = system ( cmd )
 	"
 	if v:shell_error == 0 && text =~ '^\s*$'
@@ -904,6 +1509,7 @@ endfunction    " ----------  end of function GitS_Commit  ----------
 "
 function! GitS_CommitDryRun( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
@@ -914,7 +1520,9 @@ function! GitS_CommitDryRun( action, ... )
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
+		let update_only = a:0 == 0
+		"
+		if update_only      | " run again with old parameters
 		elseif empty( a:1 ) | let param = ''
 		else                | let param = a:1
 		endif
@@ -931,7 +1539,7 @@ function! GitS_CommitDryRun( action, ... )
 		let b:GitSupport_CommitDryRunFlag = 1
 		"
 		setlocal filetype=gitsstatus
-		setlocal foldtext=GitS_Fold()
+		setlocal foldtext=GitS_FoldLog()
 		"
 		exe 'nmap          <buffer> <S-F1> :call GitS_CommitDryRun("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_CommitDryRun("quit")<CR>'
@@ -940,7 +1548,7 @@ function! GitS_CommitDryRun( action, ... )
 	"
 	call s:ChangeCWD ( buf )
 	"
-	if a:0 == 0
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -948,7 +1556,7 @@ function! GitS_CommitDryRun( action, ... )
 	"
 	let cmd = s:Git_Executable.' commit --dry-run '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_CommitDryRun  ----------
 "
@@ -956,23 +1564,151 @@ endfunction    " ----------  end of function GitS_CommitDryRun  ----------
 " GitS_Diff : execute 'git diff ...'   {{{1
 "-------------------------------------------------------------------------------
 "
+"-------------------------------------------------------------------------------
+" s:Diff_GetFile : Get the file (and line/col) under the cursor.   {{{2
+"
+" Parameters:
+"   line - if the argument equals 'line', return line number (string, optional)
+" Returns:
+"   [ <file-name>, <line>, <column> ] - data (list: string, integer, integer)
+"
+" The entries are as follows:
+"   file name - name of the file under the cursor (string)
+"   line      - the line in the original file (integer)
+"   column    - the column in the original file (integer)
+"
+" Only obtains the line if the optional parameter 'line' is given:
+"   let [ ... ] = s:Diff_GetFile ( 'line' )
+"
+" If only the name of the file could be obtained, returns:
+"   [ <file-name>, -1, -1 ]
+" If no file could be found:
+"   [ '', -1, -1 ]
+"-------------------------------------------------------------------------------
+"
+function! s:Diff_GetFile( ... )
+	"
+	let f_name = ''
+	let f_line = -1
+	let f_col  = -1
+	"
+	let f_pos = line('.')
+	"
+	" get line and col
+	if a:0 > 0 && a:1 == 'line'
+		"
+		let r_pos = f_pos
+		let f_col = getpos( '.' )[2]
+		let f_off1 = 0
+		let f_off2 = 0
+		"
+		while r_pos > 0
+			"
+			if getline(r_pos) =~ '^[+ ]'
+				let f_off1 += 1
+				if getline(r_pos) =~ '^[+ ][+ ]'
+					let f_off2 += 1
+				endif
+			elseif getline(r_pos) =~ '^@@ '
+				let s_range = matchstr( getline(r_pos), '^@@ -\d\+,\d\+ +\zs\d\+\ze,\d\+ @@' )
+				let f_line = s_range - 1 + f_off1
+				let f_col  = max ( [ f_col-1, 1 ] )
+				break
+			elseif getline(r_pos) =~ '^@@@ '
+				let s_range = matchstr( getline(r_pos), '^@@@ -\d\+,\d\+ -\d\+,\d\+ +\zs\d\+\ze,\d\+ @@@' )
+				let f_line = s_range - 1 + f_off2
+				let f_col  = max ( [ f_col-2, 1 ] )
+				break
+			elseif getline(r_pos) =~ '^diff '
+				break
+			endif
+			"
+			let r_pos -= 1
+		endwhile
+		"
+		let f_pos = r_pos
+		"
+	endif
+	"
+	" get file
+	while f_pos > 0
+		"
+		if getline(f_pos) =~ '^diff --git'
+			let f_name = matchstr ( getline(f_pos), 'a\([/\\]\)\zs\(.*\)\ze b\1\2\s*$' )
+			break
+		elseif getline(f_pos) =~ '^diff --cc'
+			let f_name = matchstr ( getline(f_pos), '^diff --cc \zs.*$' )
+			break
+		endif
+		"
+		let f_pos -= 1
+	endwhile
+	"
+	return [ f_name, f_line, f_col ]
+	"
+endfunction    " ----------  end of function s:Diff_GetFile  ----------
+" }}}2
+"-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" GitS_Diff : execute 'git diff ...'
+"-------------------------------------------------------------------------------
+"
 function! GitS_Diff( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
-		echo s:HelpTxtStd
+		let txt  = s:HelpTxtStd."\n\n"
+		let txt .= "of      : file under cursor: open file (edit)\n"
+		let txt .= "oj      : file under cursor: open and jump to the position under the cursor\n\n"
+		let txt .= "For settings see:\n"
+		let txt .= "  :help g:Git_DiffExpandEmpty"
+		echo txt
 		return
 	elseif a:action == 'quit'
 		close
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
-		elseif empty( a:1 ) | let param = s:EscapeCurrent()
-		else                | let param = a:1
+		let update_only = a:0 == 0
+		"
+		if update_only
+			" run again with old parameters
+		elseif empty( a:1 ) && g:Git_DiffExpandEmpty == 'yes'
+			let param = s:EscapeCurrent()
+		else
+			let param = a:1
 		endif
 		"
+	elseif a:action =~ '\<\%(\|edit\|jump\)\>'
+		"
+		let base = s:GitRepoBase()
+		"
+		" could not get top-level?
+		if base == '' | return | endif
+		"
+		if a:action == 'edit'
+	 		let [ f_name, f_line, f_col ] = s:Diff_GetFile ()
+		elseif a:action == 'jump'
+			let [ f_name, f_line, f_col ] = s:Diff_GetFile ( 'line' )
+		endif
+		"
+		if f_name == ''
+			return s:ErrorMsg ( 'No file under the cursor.' )
+		endif
+		"
+		let f_name = base.'/'.f_name
+		"
+		if a:action == 'edit'
+					\ || ( a:action == 'jump' && f_line == -1 )
+			call s:OpenFile( f_name )
+		elseif a:action == 'jump'
+			call s:OpenFile( f_name, f_line, f_col )
+		endif
+		"
+		return
 	else
 		echoerr 'Unknown action "'.a:action.'".'
 		return
@@ -985,16 +1721,19 @@ function! GitS_Diff( action, ... )
 		let b:GitSupport_DiffFlag = 1
 		"
 		setlocal filetype=gitsdiff
-		setlocal foldtext=GitS_Fold()
+		setlocal foldtext=GitS_FoldLog()
 		"
 		exe 'nmap          <buffer> <S-F1> :call GitS_Diff("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_Diff("quit")<CR>'
 		exe 'nmap <silent> <buffer> u      :call GitS_Diff("update")<CR>'
+
+		exe 'nmap <silent> <buffer> of     :call GitS_Diff("edit")<CR>'
+		exe 'nmap <silent> <buffer> oj     :call GitS_Diff("jump")<CR>'
 	endif
 	"
 	call s:ChangeCWD ( buf )
 	"
-	if a:0 == 0
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -1002,7 +1741,7 @@ function! GitS_Diff( action, ... )
 	"
 	let cmd = s:Git_Executable.' diff '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_Diff  ----------
 "
@@ -1019,6 +1758,138 @@ function! GitS_Fetch( param, flags )
 endfunction    " ----------  end of function GitS_Fetch  ----------
 "
 "-------------------------------------------------------------------------------
+" GitS_Grep : execute 'git grep ...'   {{{1
+"-------------------------------------------------------------------------------
+"
+"-------------------------------------------------------------------------------
+" s:Grep_GetFile : Get the file and line under the cursor.   {{{2
+"
+" Parameters:
+"   -
+" Returns:
+"   [ <file-name>, <line> ] - data (list: string, integer)
+"
+" The entries are as follows:
+"   file name - name of the file under the cursor (string)
+"   line      - the line in the original file (integer)
+"
+" If only the name of the file could be obtained, returns:
+"   [ <file-name>, -1 ]
+" If no file could be found:
+"   [ '', -1 ]
+"-------------------------------------------------------------------------------
+"
+function! s:Grep_GetFile()
+	"
+	let mlist = matchlist ( getline('.'), '^\([^:]\+\):\%(\(\d\+\):\)\?' )
+	"
+	if empty ( mlist )
+		return [ '', -1 ]
+	endif
+	"
+	let f_name = mlist[1]
+	let f_line = mlist[2]
+	"
+	if f_line == ''
+		return [ f_name, -1 ]
+	endif
+	"
+	return [ f_name, str2nr ( f_line ) ]
+	"
+endfunction    " ----------  end of function s:Grep_GetFile  ----------
+" }}}2
+"-------------------------------------------------------------------------------
+"
+function! GitS_Grep( action, ... )
+	"
+	let update_only = 0
+	let param = ''
+	"
+	if a:action == 'help'
+		let txt  = s:HelpTxtStd."\n\n"
+		let txt .= "of      : file under cursor: open file (edit)\n"
+		let txt .= "oj      : file under cursor: open and jump to the corresponding line\n"
+		let txt .= "<Enter> : file under cursor: open and jump to the corresponding line"
+		echo txt
+		return
+	elseif a:action == 'quit'
+		close
+		return
+	elseif a:action == 'update' || a:action == 'top'
+		"
+		let update_only = a:0 == 0
+		"
+		if update_only      | " run again with old parameters
+		elseif empty( a:1 ) | let param = ''
+		else                | let param = a:1
+		endif
+		"
+	elseif a:action =~ '\<\%(\|edit\|jump\)\>'
+		"
+		call s:ChangeCWD ()
+		"
+		let [ f_name, f_line ] = s:Grep_GetFile ()
+		"
+		if f_name == ''
+			return s:ErrorMsg ( 'No file under the cursor.' )
+		end
+		"
+		if a:action == 'edit'
+					\ || ( a:action == 'jump' && f_line == -1 )
+			call s:OpenFile( f_name )
+		elseif a:action == 'jump'
+			call s:OpenFile( f_name, f_line, 1 )
+		endif
+		"
+		return
+	else
+		echoerr 'Unknown action "'.a:action.'".'
+		return
+	endif
+	"
+	let buf = s:CheckCWD ()
+	"
+	" for action 'top', set the working directory to the top-level directory
+	if a:action == 'top'
+		let base = s:GitRepoBase()
+		"
+		" could not get top-level?
+		if base == '' | return | endif
+		"
+		let buf[1] = base
+	endif
+	"
+	if s:OpenGitBuffer ( 'Git - grep' )
+		"
+		let b:GitSupport_GrepFlag = 1
+		"
+		setlocal filetype=gitsgrep
+		setlocal foldtext=GitS_FoldGrep()
+		"
+		exe 'nmap          <buffer> <S-F1> :call GitS_Grep("help")<CR>'
+		exe 'nmap <silent> <buffer> q      :call GitS_Grep("quit")<CR>'
+		exe 'nmap <silent> <buffer> u      :call GitS_Grep("update")<CR>'
+		"
+		exe 'nmap <silent> <buffer> of      :call GitS_Grep("edit")<CR>'
+		exe 'nmap <silent> <buffer> oj      :call GitS_Grep("jump")<CR>'
+		exe 'nmap <silent> <buffer> <Enter> :call GitS_Grep("jump")<CR>'
+	endif
+	"
+	call s:ChangeCWD ( buf )
+	"
+	if update_only
+		let param = b:GitSupport_Param
+	else
+		let b:GitSupport_Param = param
+	endif
+	"
+	let cmd = s:Git_Executable.' grep '.param
+	"
+	call s:UpdateGitBuffer ( cmd, update_only )
+	"
+endfunction    " ----------  end of function GitS_Grep  ----------
+"
+"-------------------------------------------------------------------------------
 " GitS_Help : execute 'git help'   {{{1
 "-------------------------------------------------------------------------------
 "
@@ -1027,8 +1898,7 @@ function! GitS_Help( action, ... )
 	let helpcmd = ''
 	"
 	if a:action == 'disabled'
-		call s:ImportantMsg ( s:DisabledMessage, s:DisabledReason )
-		return
+		return s:ImportantMsg ( s:DisabledMessage, s:DisabledReason )
 	elseif a:action == 'help'
 		echo s:HelpTxtStdNoUpdate
 " 		let txt  = s:HelpTxtStdNoUpdate."\n\n"
@@ -1055,7 +1925,6 @@ function! GitS_Help( action, ... )
 	endif
 	"
 	if s:GitHelpFormat == 'html'
-		echo 'test'
 		return s:StandardRun ( 'help', helpcmd, '' )
 	endif
 	"
@@ -1129,7 +1998,7 @@ function! GitS_Log( action, ... )
 		let b:GitSupport_LogFlag = 1
 		"
 		setlocal filetype=gitslog
-		setlocal foldtext=GitS_Fold()
+		setlocal foldtext=GitS_FoldLog()
 		"
 		exe 'nmap          <buffer> <S-F1> :call GitS_Log("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_Log("quit")<CR>'
@@ -1156,9 +2025,31 @@ endfunction    " ----------  end of function GitS_Log  ----------
 " Flags: -> s:StandardRun
 "-------------------------------------------------------------------------------
 "
-function! GitS_Merge( param, flags )
+function! GitS_Merge( mode, param, flags )
 	"
-	return s:StandardRun ( 'merge', a:param, a:flags, 'c' )
+	" TODO: git for-each-ref --format='%(upstream:short)' refs/heads/csupport-dev
+	"
+	if a:mode == 'direct'
+		"
+		return s:StandardRun ( 'merge', a:param, a:flags, 'c' )
+		"
+	elseif a:mode == 'upstream'
+		"
+		let b_current = s:StandardRun ( 'symbolic-ref', '-q HEAD', 't' )
+		let b_upstream = s:StandardRun ( 'for-each-ref', " --format='%(upstream:short)' ".shellescape( b_current ), 't' )
+		"
+		if b_upstream == ''
+			return s:ImportantMsg ( 'No upstream branch.' )
+		elseif a:param == ''
+			return s:StandardRun ( 'merge', b_upstream, 'c' )
+		else
+			return s:StandardRun ( 'merge', a:param.' '.b_upstream, 'c' )
+		endif
+		"
+	else
+		echoerr 'Unknown mode "'.a:mode.'".'
+		return
+	endif
 	"
 endfunction    " ----------  end of function GitS_Merge  ----------
 "
@@ -1246,7 +2137,7 @@ function! GitS_RemoteList( action )
 	"
 	let cmd = s:Git_Executable.' remote -v'
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, 1 )
 	"
 endfunction    " ----------  end of function GitS_RemoteList  ----------
 "
@@ -1312,7 +2203,7 @@ function! GitS_Show( action, ... )
 		let b:GitSupport_ShowFlag = 1
 		"
 		setlocal filetype=gitslog
-		setlocal foldtext=GitS_Fold()
+		setlocal foldtext=GitS_FoldLog()
 		"
 		exe 'nmap          <buffer> <S-F1> :call GitS_Show("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_Show("quit")<CR>'
@@ -1360,6 +2251,7 @@ endfunction    " ----------  end of function GitS_Stash  ----------
 "
 function! GitS_StashList( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
@@ -1370,7 +2262,9 @@ function! GitS_StashList( action, ... )
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
+		let update_only = a:0 == 0
+		"
+		if update_only      | " run again with old parameters
 		elseif empty( a:1 ) | let param = ''
 		else                | let param = a:1
 		endif
@@ -1379,6 +2273,8 @@ function! GitS_StashList( action, ... )
 		echoerr 'Unknown action "'.a:action.'".'
 		return
 	endif
+	"
+	let buf = s:CheckCWD ()
 	"
 	if s:OpenGitBuffer ( 'Git - stash list' )
 		"
@@ -1391,7 +2287,9 @@ function! GitS_StashList( action, ... )
 		exe 'nmap <silent> <buffer> u      :call GitS_StashList("update")<CR>'
 	endif
 	"
-	if a:0 == 0
+	call s:ChangeCWD ( buf )
+	"
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -1399,7 +2297,7 @@ function! GitS_StashList( action, ... )
 	"
 	let cmd = s:Git_Executable.' stash '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_StashList  ----------
 "
@@ -1409,6 +2307,7 @@ endfunction    " ----------  end of function GitS_StashList  ----------
 "
 function! GitS_StashShow( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
@@ -1419,7 +2318,9 @@ function! GitS_StashShow( action, ... )
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
+		let update_only = a:0 == 0
+		"
+		if update_only      | " run again with old parameters
 		elseif empty( a:1 ) | let param = ''
 		else                | let param = a:1
 		endif
@@ -1428,6 +2329,8 @@ function! GitS_StashShow( action, ... )
 		echoerr 'Unknown action "'.a:action.'".'
 		return
 	endif
+	"
+	let buf = s:CheckCWD ()
 	"
 	if s:OpenGitBuffer ( 'Git - stash show' )
 		"
@@ -1439,7 +2342,9 @@ function! GitS_StashShow( action, ... )
 		exe 'nmap <silent> <buffer> q      :call GitS_StashShow("quit")<CR>'
 	endif
 	"
-	if a:0 == 0
+	call s:ChangeCWD ( buf )
+	"
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -1447,12 +2352,12 @@ function! GitS_StashShow( action, ... )
 	"
 	let cmd = s:Git_Executable.' stash '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_StashShow  ----------
 "
 "-------------------------------------------------------------------------------
-" Status : Auxiliary   {{{1
+" GitS_Status : execute 'git status'   {{{1
 "-------------------------------------------------------------------------------
 "
 " s:Status_SectionCodes   {{{2
@@ -1463,10 +2368,32 @@ let s:Status_SectionCodes = {
 			\ 'u': 'untracked',
 			\ 'i': 'ignored',
 			\ 'c': 'conflict',
+			\ 'd': 'diff',
 			\ }
 "
 "-------------------------------------------------------------------------------
-" s:Status_GetFile : Get the file under the cursor and its status. {{{2
+" s:Status_GetFile : Get the file under the cursor and its status.   {{{2
+"
+" Parameters:
+"   -
+" Returns:
+"   [ <file-name>, <file-status>, <section-code> ] - data (list: 3x string)
+"
+" The entries are as follows:
+"   file name    - name of the file under the cursor (string)
+"   file status  - status of the file, see below (string)
+"   section code - one character encoding the section the file was found in,
+"                  use 's:Status_SectionCodes' to decode the meaning (string)
+"
+" Status:
+" - "new file"
+" - "modified"
+" - "deleted"
+" - "conflict"
+" - one of the two-letter status codes of "git status --short"
+"
+" In case of an error, the list contains to empty strings and an error message:
+"   [ '', '', <error-message> ]
 "-------------------------------------------------------------------------------
 "
 function! s:Status_GetFile()
@@ -1478,8 +2405,7 @@ function! s:Status_GetFile()
 		let line = getline('.')
 		"
 		if line =~ '^##'
-			call s:ErrorMsg ( 'No file under the cursor.' )
-			return []
+			return [ '', '', 'No file under the cursor.' ]
 		elseif line =~ '^\%([MARC][MD]\|DM\)\s'
 			let s_code = 'b'
 		elseif line =~ '^[MARCD] \s'
@@ -1493,8 +2419,7 @@ function! s:Status_GetFile()
 		elseif line =~ '^\%(AA\|DD\|[AD]U\|U[ADU]\)\s'
 			let s_code = 'c'
 		else
-			call s:ErrorMsg ( 'Unknown section, aborting.' )
-			return []
+			return [ '', '', 'Unknown section, aborting.' ]
 		endif
 		"
 		let [ f_status, f_name ] = matchlist( line, '^\(..\)\s\(.*\)' )[1:2]
@@ -1503,58 +2428,74 @@ function! s:Status_GetFile()
 		"
 		" regular output
 		"
+		let c_line = getline('.')
 		let c_pos  = line('.')
 		let h_pos  = c_pos
 		let s_head = ''
 		"
-		" find header
-		while h_pos > 0
+		if c_line =~ '^#'
 			"
-			let s_head = matchstr( getline(h_pos), '^# \zs[[:alnum:][:space:]]\+\ze:$' )
+			" find header
+			while h_pos > 0
+				"
+				let s_head = matchstr( getline(h_pos), '^# \zs[[:alnum:][:space:]]\+\ze:$' )
+				"
+				if ! empty( s_head )
+					break
+				endif
+				"
+				let h_pos -= 1
+			endwhile
 			"
-			if ! empty( s_head )
-				break
+			" which header?
+			if s_head == ''
+				return [ '', '', 'Not in any section.' ]
+			elseif s_head == 'Changes to be committed'
+				let s_code = 's'
+			elseif s_head == 'Changed but not updated' || s_head == 'Changes not staged for commit'
+				let s_code = 'm'
+			elseif s_head == 'Untracked files'
+				let s_code = 'u'
+			elseif s_head == 'Ignored files'
+				let s_code = 'i'
+			elseif s_head == 'Unmerged paths'
+				let s_code = 'c'
+			else
+				return [ '', '', 'Unknown section "'.s_head.'", aborting.' ]
 			endif
 			"
-			let h_pos -= 1
-		endwhile
-		"
-		" which header?
-		if s_head == ''
-			call s:ErrorMsg ( 'Not in any section.' )
-			return []
-		elseif s_head == 'Changes to be committed'
-			let s_code = 's'
-		elseif s_head == 'Changed but not updated' || s_head == 'Changes not staged for commit'
-			let s_code = 'm'
-		elseif s_head == 'Untracked files'
-			let s_code = 'u'
-		elseif s_head == 'Ignored files'
-			let s_code = 'i'
-		elseif s_head == 'Unmerged paths'
-			let s_code = 'c'
-		else
-			call s:ErrorMsg ( 'Unknown section "'.s_head.'", aborting.' )
-			return []
-		endif
-		"
-		" get the filename
-		if s_code =~ '[smc]'
-			let mlist = matchlist( getline(c_pos), '^#\t\([[:alnum:][:space:]]\+\):\s\+\(\S.*\)$' )
-		else
-			let mlist = matchlist( getline(c_pos), '^#\t\(\)\(\S.*\)$' )
-		endif
-		"
-		" check the filename
-		if empty( mlist )
-			call s:ErrorMsg ( 'No file under the cursor.' )
-			return []
-		endif
-		"
-		let [ f_status, f_name ] = mlist[1:2]
-		"
-		if s_code == 'c'
-			let f_status = 'conflict'
+			" get the filename
+			if s_code =~ '[smc]'
+				let mlist = matchlist( c_line, '^#\t\([[:alnum:][:space:]]\+\):\s\+\(\S.*\)$' )
+			else
+				let mlist = matchlist( c_line, '^#\t\(\)\(\S.*\)$' )
+			endif
+			"
+			" check the filename
+			if empty( mlist )
+				return [ '', '', 'No file under the cursor.' ]
+			endif
+			"
+			let [ f_status, f_name ] = mlist[1:2]
+			"
+			if s_code == 'c'
+				let f_status = 'conflict'
+			endif
+			"
+		elseif b:GitSupport_VerboseOption == 1
+			"
+	 		let [ f_name, f_line, f_col ] = s:Diff_GetFile ()
+			"
+			if f_name == ''
+				return [ '', '', 'No file under the cursor.' ]
+			else
+				let base = s:GitRepoBase()
+				" could not get top-level?
+				if base == ''
+					return [ '', '', 'could not obtain the top-level directory' ]
+				endif
+				return[ 'd', 'modified', s:GitRepoBase().'/'.f_name ]
+			endif
 		endif
 		"
 	endif
@@ -1564,12 +2505,33 @@ function! s:Status_GetFile()
 		let f_name = substitute ( f_name, '\\\(.\)', '\1', 'g' )
 	endif
 	"
-	return [ s_code, f_status, f_name ]
+	return [ f_name, f_status, s_code ]
 	"
 endfunction    " ----------  end of function s:Status_GetFile  ----------
 "
 "-------------------------------------------------------------------------------
-" s:Status_FileAction : Execute a command for the file under the cursor. {{{2
+" s:Status_FileAction : Execute a command for the file under the cursor.   {{{2
+"
+" Parameters:
+"   action - the action to perform, see below (string)
+" Returns:
+"   success - true, if the command was run successfully (integer)
+"
+" Uses 's:Status_GetFile' to obtain the section and file under the cursor. Then
+" the action is performed, if allowed for this section. The actions are named
+" for Git commands, except for "edit" (ckout = checkout):
+"
+"    section / action
+"                  | edit  | diff  log   | add   ckout reset rm    | del
+"  staged    (b/s) |  x    |  x     x    |  -     -     x     -    |  -
+"  modified  (b/m) |  x    |  x     x    |  x     x     -     ?    |  -
+"  untracked (u)   |  x    |  -     -    |  x     -     -     -    |  x
+"  ignored   (i)   |  x    |  -     -    |  x     -     -     -    |  x
+"  unmerged  (c)   |  x    |  x     x    |  x     -     -     x    |  -
+"  diff      (d)   |  x    |  x     x    |  -     -     x     -    |  -
+"
+"  in section 'staged'   : action 'diff' may behave differently
+"  in section 'modified' : action 'rm' only for status 'deleted'
 "-------------------------------------------------------------------------------
 "
 function! s:Status_FileAction( action )
@@ -1577,39 +2539,40 @@ function! s:Status_FileAction( action )
 	" the file under the cursor
 	let fileinfo = s:Status_GetFile()
 	"
-	if empty( fileinfo )
+	let [ f_name, f_status, s_code ] = fileinfo
+	"
+	if f_name == ''
+		call s:ErrorMsg ( s_code )
 		return 0
 	endif
-	"
-	let [ s_code, f_status, f_name ] = fileinfo
-	"
-	" section / action
-	"                 | edit  | diff  log   | add   ckout reset rm
-	" staged    (b/s) |  x    |  x     x    |  -     -     x     -
-	" modified  (b/m) |  x    |  x     x    |  x     x     -     ?
-	" untracked (u)   |  x    |  -     -    |  x     -     -     -
-	" ignored   (i)   |  x    |  -     -    |  x     -     -     -
-	" unmerged  (c)   |  x    |  x     x    |  x     -     -     x
-	"  (ckout = checkout)
-	"
-	" in section 'modified': action 'rm' only for status 'deleted'
 	"
 	let f_name_esc = '-- '.s:EscapeFile( f_name )
 	"
 	if a:action == 'edit'
 		"
 		" any section, action "edit"
-		belowright new
-		exe "edit ".fnameescape( f_name )
+		call s:OpenFile( f_name )
 		"
-	elseif s_code =~ '[bsmc]' && a:action == 'diff'
+	elseif s_code == 's' && a:action == 'diff'
 		"
-		" section "staged", "modified" or "conflict", action "diff"
+		" section "staged", action "diff"
+		if g:Git_StatusStagedOpenDiff == 'cached'
+			call GitS_Diff( 'update', '--cached '.f_name_esc )
+		elseif g:Git_StatusStagedOpenDiff == 'head'
+			call GitS_Diff( 'update', 'HEAD '.f_name_esc )
+		else
+			call GitS_Diff( 'update', f_name_esc )
+		endif
+		"
+	elseif s_code =~ '[bmcd]' && a:action == 'diff'
+		"
+		" section "modified", "conflict" or "diff", action "diff"
+		" (this is also called for section "both" in short status output)
 		call GitS_Diff( 'update', f_name_esc )
 		"
-	elseif s_code =~ '[bsmc]' && a:action == 'log'
+	elseif s_code =~ '[bsmcd]' && a:action == 'log'
 		"
-		" section "staged", "modified" or "conflict", action "log"
+		" section "staged", "modified", "conflict" or "diff", action "log"
 		call GitS_Log( 'update', f_name_esc )
 		"
 	elseif s_code == 'i' && a:action == 'add'
@@ -1662,9 +2625,9 @@ function! s:Status_FileAction( action )
 			call s:ErrorMsg ( 'Checking out not implemented yet for file status "'.f_status.'".' )
 		endif
 		"
-	elseif s_code =~ '[bs]' && a:action == 'reset'
+	elseif s_code =~ '[bsd]' && a:action == 'reset'
 		"
-		" section "staged", action "reset"
+		" section "staged" or "diff", action "reset"
 		"
 		if f_status == 'modified' || f_status == 'new file' || f_status == 'deleted' || f_status =~ '^[MADRC].$'
 			" reset a modified, new or deleted file?
@@ -1692,6 +2655,16 @@ function! s:Status_FileAction( action )
 			return 1
 		endif
 		"
+	elseif s_code =~ '[ui]' && a:action == 'delete'
+		"
+		" section "untracked" or "ignored", action "delete"
+		"
+		if ! exists( '*delete' )
+			call s:ErrorMsg ( 'Can not delete files from harddisk.' )
+		elseif s:Question( 'Delete file "'.f_name.'" from harddisk?' ) == 1
+			return delete ( f_name ) == 0
+		endif
+		"
 	else
 		"
 		" action not implemented for section
@@ -1703,49 +2676,60 @@ function! s:Status_FileAction( action )
 	return 0
 	"
 endfunction    " ----------  end of function s:Status_FileAction  ----------
+" }}}2
+"-------------------------------------------------------------------------------
 "
 "-------------------------------------------------------------------------------
-" GitS_Status : execute 'git status'   {{{1
+" GitS_Status : execute 'git status'
 "-------------------------------------------------------------------------------
 "
 function! GitS_Status( action )
 	"
+	let update_only = 0
+	"
 	if a:action == 'help'
 		let txt  = s:HelpTxtStd."\n\n"
-		let txt .= "i       : toggle \"show ignored files\"\n"
-		let txt .= "s       : toggle \"short output\"\n"
-		let txt .= "v       : toggle \"verbose output\"\n"
+		let txt .= "toggle ...\n"
+		let txt .= "i       : show ignored files\n"
+		let txt .= "s       : short output\n"
+		let txt .= "v       : verbose output\n"
 		let txt .= "\n"
-		let txt .= "a       : file under cursor: add\n"
-		let txt .= "c       : file under cursor: checkout\n"
-		let txt .= "od      : file under cursor: open diff\n"
-		let txt .= "of      : file under cursor: open file (edit)\n"
-		let txt .= "ol      : file under cursor: open log\n"
-		let txt .= "r       : file under cursor: reset\n"
-		let txt .= "r       : file under cursor: remove (only for unmerged changes)"
+		let txt .= "file under cursor ...\n"
+		let txt .= "a       : add\n"
+		let txt .= "c       : checkout\n"
+		let txt .= "od      : open diff\n"
+		let txt .= "of      : open file (edit)\n"
+		let txt .= "ol      : open log\n"
+		let txt .= "r       : reset\n"
+		let txt .= "r       : remove (only for unmerged changes)\n"
+		let txt .= "D       : delete from file system (only untracked files)\n"
+		let txt .= "\n"
+		let txt .= "For settings see:\n"
+		let txt .= "  :help g:Git_StatusStagedOpenDiff"
 		echo txt
 		return
 	elseif a:action == 'quit'
 		close
 		return
 	elseif a:action == 'update'
-		" noop
+		let update_only = 1
 	elseif a:action == 'ignored'
 		if ! s:HasStatusIgnore
-			call s:ErrorMsg ( '"show ignored files" not available in Git version '.s:GitVersion.'.' )
-			return
+			return s:ErrorMsg ( '"show ignored files" not available in Git version '.s:GitVersion.'.' )
 		endif
 	elseif a:action =~ '\<\%(short\|verbose\)\>'
 		" noop
-	elseif a:action =~ '\<\%(add\|checkout\|diff\|edit\|log\|reset\)\>'
+	elseif a:action =~ '\<\%(add\|checkout\|diff\|edit\|log\|reset\|delete\)\>'
 		"
-		if getline('.') =~ '^#' || b:GitSupport_ShortOption
+ 		call s:ChangeCWD ()
+		"
+" 		if getline('.') =~ '^#' || b:GitSupport_ShortOption
 			if s:Status_FileAction ( a:action )
 				call GitS_Status( 'update' )
 			endif
-		else
-			call s:ErrorMsg ( 'Not in status section.' )
-		endif
+" 		else
+" 			call s:ErrorMsg ( 'Not in status section.' )
+" 		endif
 		"
 		return
 	else
@@ -1763,7 +2747,7 @@ function! GitS_Status( action )
 		let b:GitSupport_VerboseOption    = 0
 		"
 		setlocal filetype=gitsstatus
-		setlocal foldtext=GitS_Fold()
+		setlocal foldtext=GitS_FoldLog()
 		"
 		exe 'nmap          <buffer> <S-F1> :call GitS_Status("help")<CR>'
 		exe 'nmap <silent> <buffer> q      :call GitS_Status("quit")<CR>'
@@ -1779,6 +2763,7 @@ function! GitS_Status( action )
 		exe 'nmap <silent> <buffer> of     :call GitS_Status("edit")<CR>'
 		exe 'nmap <silent> <buffer> ol     :call GitS_Status("log")<CR>'
 		exe 'nmap <silent> <buffer> r      :call GitS_Status("reset")<CR>'
+		exe 'nmap <silent> <buffer> D      :call GitS_Status("delete")<CR>'
 		"
 	endif
 	"
@@ -1809,7 +2794,7 @@ function! GitS_Status( action )
 	if b:GitSupport_ShortOption   == 1 && ! s:HasStatusBranch | let cmd .= ' --short'          | endif
 	if b:GitSupport_VerboseOption == 1                        | let cmd .= ' --verbose'        | endif
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_Status  ----------
 "
@@ -1841,6 +2826,7 @@ endfunction    " ----------  end of function GitS_Tag  ----------
 "
 function! GitS_TagList( action, ... )
 	"
+	let update_only = 0
 	let param = ''
 	"
 	if a:action == 'help'
@@ -1851,7 +2837,9 @@ function! GitS_TagList( action, ... )
 		return
 	elseif a:action == 'update'
 		"
-		if a:0 == 0         | " run again with old parameters
+		let update_only = a:0 == 0
+		"
+		if update_only      | " run again with old parameters
 		elseif empty( a:1 ) | let param = ''
 		else                | let param = a:1
 		endif
@@ -1860,6 +2848,8 @@ function! GitS_TagList( action, ... )
 		echoerr 'Unknown action "'.a:action.'".'
 		return
 	endif
+	"
+	let buf = s:CheckCWD ()
 	"
 	if s:OpenGitBuffer ( 'Git - tag' )
 		"
@@ -1872,7 +2862,9 @@ function! GitS_TagList( action, ... )
 		exe 'nmap <silent> <buffer> u      :call GitS_TagList("update")<CR>'
 	endif
 	"
-	if a:0 == 0
+	call s:ChangeCWD ( buf )
+	"
+	if update_only
 		let param = b:GitSupport_Param
 	else
 		let b:GitSupport_Param = param
@@ -1880,9 +2872,79 @@ function! GitS_TagList( action, ... )
 	"
 	let cmd = s:Git_Executable.' tag '.param
 	"
-	call s:UpdateGitBuffer ( cmd )
+	call s:UpdateGitBuffer ( cmd, update_only )
 	"
 endfunction    " ----------  end of function GitS_TagList  ----------
+"
+"-------------------------------------------------------------------------------
+" GitS_GitK : execute 'gitk ...'   {{{1
+"-------------------------------------------------------------------------------
+"
+function! GitS_GitK( param )
+	"
+	" :TODO:10.12.2013 20:14:WM: graphics available?
+	if s:EnabledGitK == 0
+		return s:ErrorMsg ( s:DisableGitKMessage, s:DisableGitKReason )
+	elseif s:FoundGitKScript == 0
+		return s:ErrorMsg ( s:DisableGitKMessage, s:GitKScriptMessage )
+	endif
+	"
+	if s:MSWIN
+		silent exe '!'.s:Git_GitKExecutable.' '.s:Git_GitKScript.' '.a:param
+	else
+		silent exe '!'.s:Git_GitKExecutable.' '.s:Git_GitKScript.' '.a:param.' &'
+	endif
+	"
+endfunction    " ----------  end of function GitS_GitK  ----------
+"
+"-------------------------------------------------------------------------------
+" GitS_PluginHelp : Plug-in help.   {{{1
+"-------------------------------------------------------------------------------
+"
+function! GitS_PluginHelp( topic )
+	try
+		silent exe 'help '.a:topic
+	catch
+		exe 'helptags '.s:plugin_dir.'/doc'
+		silent exe 'help '.a:topic
+	endtry
+endfunction    " ----------  end of function GitS_PluginHelp  ----------
+"
+"-------------------------------------------------------------------------------
+" GitS_PluginSettings : Print the settings on the command line.   {{{1
+"-------------------------------------------------------------------------------
+"
+function! GitS_PluginSettings(  )
+	"
+	if     s:MSWIN | let sys_name = 'Windows'
+	elseif s:UNIX  | let sys_name = 'UNIX'
+	else           | let sys_name = 'unknown' | endif
+	"
+	let gitk_e_status = s:EnabledGitK     ? '<yes>' : '<no>'
+	let gitk_s_status = s:FoundGitKScript ? '<yes>' : '<no>'
+	"
+	let	txt = " Git-Support settings\n\n"
+				\ .'     plug-in installation :  '.s:installation.' on '.sys_name."\n"
+				\ .'           git executable :  '.s:Git_Executable."\n"
+	if s:Enabled
+		let txt .= '                > version :  '.s:GitVersion."\n"
+	else
+		let txt .= "                > enabled :  <no>\n"
+	endif
+	let txt .=
+				\  '          gitk executable :  '.s:Git_GitKExecutable."\n"
+				\ .'                > enabled :  '.gitk_e_status."\n"
+	if ! empty ( s:Git_GitKScript )
+		let txt .=
+					\  '              gitk script :  '.s:Git_GitKScript."\n"
+					\ .'                  > found :  '.gitk_s_status."\n"
+	endif
+	let txt .=
+				\  "________________________________________________________________________________\n"
+				\ ." Git-Support, Version ".g:GitSupport_Version." / Wolfgang Mehner / wolfgang-mehner@web.de\n\n"
+	"
+	echo txt
+endfunction    " ----------  end of function GitS_PluginSettings  ----------
 "
 "-------------------------------------------------------------------------------
 " s:InitMenus : Initialize menus.   {{{1
@@ -1901,17 +2963,20 @@ function! s:InitMenus()
 	"
 	" Commands
 	let ahead = 'amenu '.s:Git_RootMenu.'.&git\ \.\.\..'
+	let vhead = 'vmenu '.s:Git_RootMenu.'.&git\ \.\.\..'
 	"
 	exe ahead.'Commands<TAB>Git :echo "This is a menu header!"<CR>'
 	exe ahead.'-Sep00-          :'
 	"
 	exe ahead.'&add<TAB>:GitAdd           :GitAdd<space>'
 	exe ahead.'&blame<TAB>:GitBlame       :GitBlame<space>'
+	exe vhead.'&blame<TAB>:GitBlame       :GitBlame<space>'
 	exe ahead.'&branch<TAB>:GitBranch     :GitBranch<space>'
 	exe ahead.'&checkout<TAB>:GitCheckout :GitCheckout<space>'
 	exe ahead.'&commit<TAB>:GitCommit     :GitCommit<space>'
 	exe ahead.'&diff<TAB>:GitDiff         :GitDiff<space>'
 	exe ahead.'&fetch<TAB>:GitFetch       :GitFetch<space>'
+	exe ahead.'&grep<TAB>:GitGrep         :GitGrep<space>'
 	exe ahead.'&help<TAB>:GitHelp         :GitHelp<space>'
 	exe ahead.'&log<TAB>:GitLog           :GitLog<space>'
 	exe ahead.'&merge<TAB>:GitMerge       :GitMerge<space>'
@@ -1925,41 +2990,79 @@ function! s:InitMenus()
 	exe ahead.'&stash<TAB>:GitStash       :GitStash<space>'
 	exe ahead.'&status<TAB>:GitStatus     :GitStatus<space>'
 	exe ahead.'&tag<TAB>:GitTag           :GitTag<space>'
+	exe ahead.'-Sep01-                    :'
+	exe ahead.'git&k<TAB>:GitK            :GitK<space>'
 	"
 	" Current File
-	let ahead = 'amenu '.s:Git_RootMenu.'.&file.'
+	let shead = 'amenu <silent> '.s:Git_RootMenu.'.&file.'
+	let vhead = 'vmenu <silent> '.s:Git_RootMenu.'.&file.'
 	"
-	exe ahead.'Current\ File<TAB>Git :echo "This is a menu header!"<CR>'
-	exe ahead.'-Sep00-               :'
+	exe shead.'Current\ File<TAB>Git :echo "This is a menu header!"<CR>'
+	exe shead.'-Sep00-               :'
 	"
-	exe ahead.'&add<TAB>:GitAdd           :GitAdd<CR>'
-	exe ahead.'&blame<TAB>:GitBlame       :GitBlame<CR>'
-	exe ahead.'&checkout<TAB>:GitCheckout :GitCheckout<CR>'
-	exe ahead.'&diff<TAB>:GitDiff         :GitDiff<CR>'
-	exe ahead.'r&m<TAB>:GitRm             :GitRm<CR>'
-	exe ahead.'&reset<TAB>:GitReset       :GitReset<CR>'
+	exe shead.'&add<TAB>:GitAdd           :GitAdd -- %<CR>'
+	exe shead.'&blame<TAB>:GitBlame       :GitBlame -- %<CR>'
+	exe vhead.'&blame<TAB>:GitBlame       :GitBlame -- %<CR>'
+	exe shead.'&checkout<TAB>:GitCheckout :GitCheckout -- %<CR>'
+	exe shead.'&diff<TAB>:GitDiff         :GitDiff -- %<CR>'
+	exe shead.'&log<TAB>:GitLog           :GitLog -- %<CR>'
+	exe shead.'r&m<TAB>:GitRm             :GitRm -- %<CR>'
+	exe shead.'&reset<TAB>:GitReset       :GitReset -- %<CR>'
 	"
 	" Specials
-	let ahead = 'amenu '.s:Git_RootMenu.'.spe&cials.'
+	let ahead = 'amenu          '.s:Git_RootMenu.'.s&pecials.'
+	let shead = 'amenu <silent> '.s:Git_RootMenu.'.s&pecials.'
 	"
 	exe ahead.'Specials<TAB>Git :echo "This is a menu header!"<CR>'
 	exe ahead.'-Sep00-          :'
 	"
 	exe ahead.'&commit,\ msg\ from\ file<TAB>:GitCommitFile   :GitCommitFile<space>'
-	exe ahead.'&commit,\ msg\ from\ merge<TAB>:GitCommitMerge :GitCommitMerge<CR>'
+	exe shead.'&commit,\ msg\ from\ merge<TAB>:GitCommitMerge :GitCommitMerge<CR>'
 	exe ahead.'&commit,\ msg\ from\ cmdline<TAB>:GitCommitMsg :GitCommitMsg<space>'
+	exe ahead.'-Sep01-          :'
 	"
-	" Open Buffers
-	let ahead = 'amenu '.s:Git_RootMenu.'.'
+	exe ahead.'&grep,\ use\ top-level\ dir<TAB>:GitGrepTop       :GitGrepTop<space>'
+	exe ahead.'&merge,\ upstream\ branch<TAB>:GitMergeUpstream   :GitMergeUpstream<space>'
+	"
+	" Custom Menu
+	if ! empty ( s:Git_CustomMenu )
+		"
+		let ahead = 'amenu          '.s:Git_RootMenu.'.&custom.'
+		let ahead = 'amenu <silent> '.s:Git_RootMenu.'.&custom.'
+		"
+		exe ahead.'Custom<TAB>Git :echo "This is a menu header!"<CR>'
+		exe ahead.'-Sep00-        :'
+		"
+		call s:GenerateCustomMenu ( s:Git_RootMenu.'.custom', s:Git_CustomMenu )
+		"
+		exe ahead.'-HelpSep-                                  :'
+		exe ahead.'help\ (custom\ menu)<TAB>:GitSupportHelp   :call GitS_PluginHelp("gitsupport-menus")<CR>'
+		"
+	endif
+	"
+	" Help
+	let ahead = 'amenu          '.s:Git_RootMenu.'.help.'
+	let shead = 'amenu <silent> '.s:Git_RootMenu.'.help.'
+	"
+	exe ahead.'Help<TAB>Git :echo "This is a menu header!"<CR>'
+	exe ahead.'-Sep00-      :'
+	"
+	exe shead.'help\ (Git-Support)<TAB>:GitSupportHelp     :call GitS_PluginHelp("gitsupport")<CR>'
+	exe shead.'plug-in\ settings<TAB>:GitSupportSettings   :call GitS_PluginSettings()<CR>'
+	"
+	" Main Menu - open buffers
+	let ahead = 'amenu          '.s:Git_RootMenu.'.'
+	let shead = 'amenu <silent> '.s:Git_RootMenu.'.'
 	"
 	exe ahead.'-Sep01-                      :'
+	"
 	exe ahead.'&run\ git<TAB>:Git           :Git<space>'
-	exe ahead.'&branch<TAB>:GitBranch       :GitBranch<CR>'
+	exe shead.'&branch<TAB>:GitBranch       :GitBranch<CR>'
 	exe ahead.'&help\ \.\.\.<TAB>:GitHelp   :GitHelp<space>'
-	exe ahead.'&log<TAB>:GitLog             :GitLog<CR>'
-	exe ahead.'&remote<TAB>:GitRemote       :GitRemote<CR>'
-	exe ahead.'&status<TAB>:GitStatus       :GitStatus<CR>'
-	exe ahead.'&tag<TAB>:GitTag             :GitTag<CR>'
+	exe shead.'&log<TAB>:GitLog             :GitLog<CR>'
+	exe shead.'&remote<TAB>:GitRemote       :GitRemote<CR>'
+	exe shead.'&status<TAB>:GitStatus       :GitStatus<CR>'
+	exe shead.'&tag<TAB>:GitTag             :GitTag<CR>'
 	"
 endfunction    " ----------  end of function s:InitMenus  ----------
 "
@@ -1968,6 +3071,11 @@ endfunction    " ----------  end of function s:InitMenus  ----------
 "-------------------------------------------------------------------------------
 "
 function! s:ToolMenu( action )
+	"
+	if ! has ( 'menu' )
+		return
+	endif
+	"
 	if a:action == 'setup'
 		amenu   <silent> 40.1000 &Tools.-SEP100- :
 		amenu   <silent> 40.1080 &Tools.Load\ Git\ Support   :call Git_AddMenus()<CR>
@@ -1978,6 +3086,7 @@ function! s:ToolMenu( action )
 		aunmenu <silent> &Tools.Unload\ Git\ Support
 		amenu   <silent> 40.1080 &Tools.Load\ Git\ Support   :call Git_AddMenus()<CR>
 	endif
+	"
 endfunction    " ----------  end of function s:ToolMenu  ----------
 "
 "-------------------------------------------------------------------------------
@@ -1985,7 +3094,7 @@ endfunction    " ----------  end of function s:ToolMenu  ----------
 "-------------------------------------------------------------------------------
 "
 function! Git_AddMenus()
-	if s:MenuVisible == 0 && has ( 'menu' )
+	if s:MenuVisible == 0
 		" initialize if not existing
 		call s:ToolMenu ( 'loading' )
 		call s:InitMenus ()
@@ -1999,10 +3108,12 @@ endfunction    " ----------  end of function Git_AddMenus  ----------
 "-------------------------------------------------------------------------------
 "
 function! Git_RemoveMenus()
-	if s:MenuVisible == 1 && has ( 'menu' )
+	if s:MenuVisible == 1
 		" destroy if visible
 		call s:ToolMenu ( 'unloading' )
-		exe 'aunmenu <silent> '.s:Git_RootMenu
+		if has ( 'menu' )
+			exe 'aunmenu <silent> '.s:Git_RootMenu
+		endif
 		" the menu is now invisible
 		let s:MenuVisible = 0
 	endif
@@ -2013,16 +3124,14 @@ endfunction    " ----------  end of function Git_RemoveMenus  ----------
 "-------------------------------------------------------------------------------
 "
 " tool menu entry
-if has ( 'menu' )
-	call s:ToolMenu ( 'setup' )
-endif
+call s:ToolMenu ( 'setup' )
 "
-" load the menus right now?
+" load the menu right now?
 if s:Git_LoadMenus == 'yes'
 	call Git_AddMenus ()
 endif
-"
 " }}}1
+"-------------------------------------------------------------------------------
 "
 " =====================================================================================
 "  vim: foldmethod=marker
